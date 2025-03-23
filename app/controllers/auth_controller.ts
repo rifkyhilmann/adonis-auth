@@ -11,22 +11,27 @@ export default class AuthController {
         try {
             const payload = await LoginValidator.validate(request.all());
 
-            const user = await User.findBy('email', payload.email);
+            const user = await User.findBy('email', payload.email)
 
             if (!user) {
-                return response.unauthorized({ message: 'Email atau password salah' })
-            } 
-
-            const token = await User.accessTokens.create(user);
-
-            if (await hash.verify(payload.password, user.password)) {
-                return response.unauthorized({ message: 'Email atau password salah' })
+                return response.unauthorized('Invalid credentials')
             }
+
+            const isPasswordValid = await hash.verify(user.password, payload.password)
+
+            if (!isPasswordValid) {
+                return response.unauthorized('Invalid credentials')
+            }
+            const token = await User.accessTokens.create(user)
 
             response.status(200).send({
                 message : "success",
                 status : 200,
-                
+                token : token.value!.release(),
+                data :  {
+                    full_name : user.fullName,
+                    email : user.email
+                }
             });
         } catch (error) {
             if (error instanceof errors.E_VALIDATION_ERROR) {
@@ -55,10 +60,6 @@ export default class AuthController {
                 return response.unauthorized({ message: 'Email sudah terdaftar' })
             }
 
-            const hashPassword = await hash.make(payload.password);
-
-            payload.password = hashPassword
-
             await User.create(payload);
 
             response.status(200).send({ message: 'Berhasil mendaftar' });
@@ -75,5 +76,24 @@ export default class AuthController {
 
             console.log(error)
         }
+    }
+
+    async logout(ctx : HttpContext) {
+        const { auth, response } = ctx;
+
+        try {
+            const getUser = auth.user?.id
+            const user = await User.findOrFail(getUser)
+            await User.accessTokens.delete(user, user.id);
+
+            return response.ok({
+                success: true,
+                message: 'User logged out',
+                data: getUser
+            })
+        } catch (error) {
+            response.status(500).send({ message: "Terjadi kesalahan saat logout" });
+        }
+    
     }
 }
