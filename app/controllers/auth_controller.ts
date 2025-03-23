@@ -14,13 +14,13 @@ export default class AuthController {
             const user = await User.findBy('email', payload.email)
 
             if (!user) {
-                return response.unauthorized('Invalid credentials')
+                return response.unauthorized('User not found');
             }
 
             const isPasswordValid = await hash.verify(user.password, payload.password)
 
             if (!isPasswordValid) {
-                return response.unauthorized('Invalid credentials')
+                return response.unauthorized('Password Salah')
             }
             const token = await User.accessTokens.create(user)
 
@@ -82,14 +82,17 @@ export default class AuthController {
         const { auth, response } = ctx;
 
         try {
-            const getUser = auth.user?.id
-            const user = await User.findOrFail(getUser)
-            await User.accessTokens.delete(user, user.id);
+            const user = auth.getUserOrFail()
+            const token = auth.user?.currentAccessToken.identifier
+            if (!token) {
+                return response.badRequest({ message: 'Token not found' })
+            }
+            await User.accessTokens.delete(user, token);
 
             return response.ok({
                 success: true,
                 message: 'User logged out',
-                data: getUser
+                data: token
             })
         } catch (error) {
             response.status(500).send({ message: "Terjadi kesalahan saat logout" });
